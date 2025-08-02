@@ -1,32 +1,45 @@
-name: Sync Releases from Upstream
+name: Sync Release from Upstream
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:  # 允许手动触发
   schedule:
     - cron: '0 3 * * *'  # 每天凌晨 3 点 UTC 自动同步
 
 jobs:
-  sync-release:
+  sync:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-
-    - name: Setup Node.js (required for gh-release-sync)
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20
-
-    - name: Install gh-release-sync
-      run: npm install -g gh-release-sync
-
-    - name: Sync releases from cscnk52/wechat-windows-versions
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+    - name: Install GitHub CLI
       run: |
-        gh-release-sync \
-          --source cscnk52/wechat-windows-versions \
-          --target SiverKing/wechat4.0-windows-versions \
-          --token $GITHUB_TOKEN \
-          --mode mirror
+        sudo apt update
+        sudo apt install gh -y
+
+    - name: Get latest release info from upstream
+      id: get_release
+      run: |
+        release_json=$(gh api repos/cscnk52/wechat-windows-versions/releases/latest)
+        echo "$release_json" > release.json
+        tag_name=$(echo "$release_json" | jq -r .tag_name)
+        echo "tag=$tag_name" >> $GITHUB_OUTPUT
+        echo "release_body=$(echo "$release_json" | jq -r .body)" >> $GITHUB_OUTPUT
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+    - name: Download assets
+      run: |
+        mkdir assets
+        for url in $(jq -r '.assets[].browser_download_url' release.json); do
+          wget -P assets "$url"
+        done
+
+    - name: Recreate release in your repo
+      run: |
+        gh release delete "$TAG_NAME" -R SiverKing/wechat4.0-windows-versions -y || true
+        gh release create "$TAG_NAME" assets/* \
+          --repo SiverKing/wechat4.0-windows-versions \
+          --title "$TAG_NAME" \
+          --notes "${{ steps.get_release.outputs.release_body }}"
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        TAG_NAME: ${{ steps.get_release.outputs.tag }}
