@@ -1,0 +1,32 @@
+name: Sync Releases from Upstream
+
+on:
+  workflow_dispatch:  # 手动触发
+  schedule:
+    - cron: '0 3 * * *'  # 每天凌晨 3 点 UTC 自动同步
+
+jobs:
+  sync-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js (required for gh-release-sync)
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install gh-release-sync
+      run: npm install -g gh-release-sync
+
+    - name: Sync releases from cscnk52/wechat-windows-versions
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        gh-release-sync \
+          --source cscnk52/wechat-windows-versions \
+          --target SiverKing/wechat4.0-windows-versions \
+          --token $GITHUB_TOKEN \
+          --mode mirror
