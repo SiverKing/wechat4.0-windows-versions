@@ -1,57 +1,65 @@
-name: Sync Release from Upstream
+name: Sync All Releases from Upstream
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 允许手动触发（建议首次手动触发）
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 3 * * *'  # 每天凌晨同步一次（可选）
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install GitHub CLI
+    - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install gh jq -y
+        sudo apt install gh jq wget -y
 
-    - name: Fetch latest release from upstream
-      id: get_release
+    - name: Fetch all releases from upstream
       run: |
-        release_json=$(gh api repos/cscnk52/wechat-windows-versions/releases/latest)
-        echo "$release_json" > release.json
-
-        tag_name=$(echo "$release_json" | jq -r .tag_name)
-        echo "TAG_NAME=$tag_name" >> $GITHUB_ENV
-
-        echo "$release_json" | jq -r .body > release_body.txt
+        gh api repos/cscnk52/wechat-windows-versions/releases > all_releases.json
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
-    - name: Check if release already exists
-      id: check_release
-      continue-on-error: true
-      run: |
-        gh release view "$TAG_NAME" -R SiverKing/wechat4.0-windows-versions
-      env:
-        GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        TAG_NAME: ${{ env.TAG_NAME }}
-
-    - name: Download assets from upstream release
-      if: steps.check_release.outcome == 'failure'
+    - name: Process each release
       run: |
         mkdir -p assets
-        for url in $(jq -r '.assets[].browser_download_url' release.json); do
-          wget -P assets "$url"
-        done
 
-    - name: Publish release to your repo
-      if: steps.check_release.outcome == 'failure'
-      run: |
-        gh release create "$TAG_NAME" assets/* \
-          --repo SiverKing/wechat4.0-windows-versions \
-          --title "$TAG_NAME" \
-          --notes-file release_body.txt
+        releases=$(jq -c '.[]' all_releases.json)
+
+        echo "$releases" | while read -r release; do
+          tag_name=$(echo "$release" | jq -r .tag_name)
+
+          echo "🔎 Checking tag: $tag_name"
+
+          # 检查你自己的 repo 是否已有该 release
+          if gh release view "$tag_name" -R SiverKing/wechat4.0-windows-versions >/dev/null 2>&1; then
+            echo "✅ Release $tag_name already exists, skipping."
+            continue
+          fi
+
+          echo "🚀 Syncing release: $tag_name"
+
+          # 写 release body
+          echo "$release" | jq -r .body > release_body.txt
+
+          # 清空 assets 文件夹
+          rm -rf assets/*
+          mkdir -p assets
+
+          # 下载所有 assets
+          for url in $(echo "$release" | jq -r '.assets[].browser_download_url'); do
+            wget -q -P assets "$url"
+          done
+
+          # 创建 release
+          gh release create "$tag_name" assets/* \
+            --repo SiverKing/wechat4.0-windows-versions \
+            --title "$tag_name" \
+            --notes-file release_body.txt || echo "⚠️ Failed to create $tag_name"
+
+          echo "✅ Release $tag_name synced."
+
+        done
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        TAG_NAME: ${{ env.TAG_NAME }}
