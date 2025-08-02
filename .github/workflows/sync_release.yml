@@ -20,11 +20,16 @@ jobs:
       run: |
         release_json=$(gh api repos/cscnk52/wechat-windows-versions/releases/latest)
         echo "$release_json" > release.json
+    
+        # 提取 tag name
         tag_name=$(echo "$release_json" | jq -r .tag_name)
-        echo "tag=$tag_name" >> $GITHUB_OUTPUT
-        echo "release_body=$(echo "$release_json" | jq -r .body)" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$tag_name" >> $GITHUB_ENV
+    
+        # 提取 release body，写入文件备用
+        echo "$release_json" | jq -r .body > release_body.txt
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
 
     - name: Download assets
       run: |
@@ -39,7 +44,8 @@ jobs:
         gh release create "$TAG_NAME" assets/* \
           --repo SiverKing/wechat4.0-windows-versions \
           --title "$TAG_NAME" \
-          --notes "${{ steps.get_release.outputs.release_body }}"
+          --notes-file release_body.txt
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        TAG_NAME: ${{ steps.get_release.outputs.tag }}
+        TAG_NAME: ${{ env.TAG_NAME }}
+
