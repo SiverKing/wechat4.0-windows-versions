@@ -13,11 +13,12 @@ state = {
 def extract_official_time():
     website = httpx.get("https://pc.weixin.qq.com/")
     download_link_re = re.search(
-        r"https://dldir1v6\.qq\.com/weixin/Universal/Windows/WeChatWin_([\d\.]+)\.exe",
+        r'https://dldir1v6\.qq\.com/weixin/Universal/Windows/[^"\'<>\s]+\.exe',
         website.text,
     )
     assert download_link_re, "download link not find"
     download_link_text = download_link_re.group(0)
+    print("official download lik", download_link_text)
     state["download_link"] = download_link_text
     download = httpx.head(download_link_text)
     time_text = download.headers.get("Last-Modified")
