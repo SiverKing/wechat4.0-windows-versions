@@ -27,7 +27,7 @@ def extract_official_time():
 
 def extract_repo_time():
     github_api_response = httpx.get(
-        "https://api.github.com/repos/cscnk52/wechat-windows-versions/releases/latest"
+        f"https://api.github.com/repos/{os.getenv('GITHUB_REPOSITORY')}/releases/latest"
     ).json()
     time_text_re = re.search(r"Last Modified:\s*(.+)", github_api_response["body"])
     assert time_text_re, "repo time_date match failed"
